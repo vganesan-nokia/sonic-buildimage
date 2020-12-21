@@ -51,7 +51,7 @@ def loopback_prefix():
 
 def inband_prefix():
     """
-    Retrieves the SONIC Broadcom recycle port inband interface name prefix.
+    Retrieves the SONIC recycle port inband interface name prefix.
     """
     return SONIC_INTERFACE_PREFIXES["Inband"]
 
