@@ -113,6 +113,8 @@ supervisorctl start coppmgrd
 
 supervisorctl start neighsyncd
 
+supervisorctl start fdbsyncd
+
 supervisorctl start teamsyncd
 
 supervisorctl start fpmsyncd
@@ -142,6 +144,8 @@ supervisorctl start sflowmgrd
 supervisorctl start natmgrd
 
 supervisorctl start natsyncd
+
+supervisorctl start tunnelmgrd
 
 # Start arp_update when VLAN exists
 VLAN=`sonic-cfggen -d -v 'VLAN.keys() | join(" ") if VLAN'`

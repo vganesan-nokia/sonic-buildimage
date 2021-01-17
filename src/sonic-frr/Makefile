@@ -14,12 +14,13 @@ $(addprefix $(DEST)/, $(MAIN_TARGET)): $(DEST)/% :
 	stg branch --create $(STG_BRANCH) $(FRR_TAG)
 	stg import -s ../patch/series
 	tools/tarsource.sh -V -e '-sonic'
-	dpkg-buildpackage -rfakeroot -b -us -uc -Ppkg.frr.nortrlib -j$(SONIC_CONFIG_MAKE_JOBS)
+	dpkg-buildpackage -rfakeroot -b -us -uc -Ppkg.frr.nortrlib -j$(SONIC_CONFIG_MAKE_JOBS) --admindir $(SONIC_DPKG_ADMINDIR)
 	stg undo || true
 	git clean -xfdf
 	git checkout $(FRR_BRANCH)
 	stg branch --delete $(STG_BRANCH)
 	git rev-parse --short HEAD | xargs git checkout
+	git checkout master
 	git branch -D $(FRR_BRANCH)
 	popd
 	mv $(DERIVED_TARGET) $* $(DEST)/

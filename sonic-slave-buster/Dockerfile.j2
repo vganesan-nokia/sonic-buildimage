@@ -16,7 +16,9 @@ RUN echo "deb [arch=amd64] http://debian-archive.trafficmanager.net/debian/ bust
         echo "deb-src [arch=amd64] http://debian-archive.trafficmanager.net/debian/ buster main contrib non-free" >> /etc/apt/sources.list && \
         echo "deb [arch=amd64] http://debian-archive.trafficmanager.net/debian-security/ buster/updates main contrib non-free" >> /etc/apt/sources.list && \
         echo "deb-src [arch=amd64] http://debian-archive.trafficmanager.net/debian-security/ buster/updates main contrib non-free" >> /etc/apt/sources.list && \
-        echo "deb [arch=amd64] http://debian-archive.trafficmanager.net/debian buster-backports main" >> /etc/apt/sources.list
+        echo "deb [arch=amd64] http://debian-archive.trafficmanager.net/debian buster-backports main" >> /etc/apt/sources.list && \
+        echo "deb [arch=amd64] http://packages.trafficmanager.net/debian/debian buster main contrib non-free" >> /etc/apt/sources.list && \
+        echo "deb [arch=amd64] http://packages.trafficmanager.net/debian/debian buster-updates main contrib non-free" >> /etc/apt/sources.list
 
 {%- if CONFIGURED_ARCH == "armhf" %}
 RUN echo "deb [arch=armhf] http://deb.debian.org/debian buster main contrib non-free" > /etc/apt/sources.list && \
@@ -25,7 +27,9 @@ RUN echo "deb [arch=armhf] http://deb.debian.org/debian buster main contrib non-
         echo "deb-src [arch=armhf] http://deb.debian.org/debian buster-updates main contrib non-free" >> /etc/apt/sources.list && \
         echo "deb [arch=armhf] http://security.debian.org buster/updates main contrib non-free" >> /etc/apt/sources.list && \
         echo "deb-src [arch=armhf] http://security.debian.org buster/updates main contrib non-free" >> /etc/apt/sources.list && \
-        echo 'deb [arch=armhf] http://ftp.debian.org/debian buster-backports main' >> /etc/apt/sources.list
+        echo 'deb [arch=armhf] http://ftp.debian.org/debian buster-backports main' >> /etc/apt/sources.list && \
+        echo "deb [arch=armhf] http://packages.trafficmanager.net/debian/debian buster main contrib non-free" >> /etc/apt/sources.list && \
+        echo "deb [arch=armhf] http://packages.trafficmanager.net/debian/debian buster-updates main contrib non-free" >> /etc/apt/sources.list
 {%- elif CONFIGURED_ARCH == "arm64" %}
 RUN echo "deb [arch=arm64] http://deb.debian.org/debian buster main contrib non-free" > /etc/apt/sources.list && \
         echo "deb-src [arch=arm64] http://deb.debian.org/debian buster main contrib non-free" >> /etc/apt/sources.list && \
@@ -33,7 +37,9 @@ RUN echo "deb [arch=arm64] http://deb.debian.org/debian buster main contrib non-
         echo "deb-src [arch=arm64] http://deb.debian.org/debian buster-updates main contrib non-free" >> /etc/apt/sources.list && \
         echo "deb [arch=arm64] http://security.debian.org buster/updates main contrib non-free" >> /etc/apt/sources.list && \
         echo "deb-src [arch=arm64] http://security.debian.org buster/updates main contrib non-free" >> /etc/apt/sources.list && \
-        echo 'deb [arch=arm64] http://ftp.debian.org/debian buster-backports main' >> /etc/apt/sources.list
+        echo 'deb [arch=arm64] http://ftp.debian.org/debian buster-backports main' >> /etc/apt/sources.list && \
+        echo "deb [arch=arm64] http://packages.trafficmanager.net/debian/debian buster main contrib non-free" >> /etc/apt/sources.list && \
+        echo "deb [arch=arm64] http://packages.trafficmanager.net/debian/debian buster-updates main contrib non-free" >> /etc/apt/sources.list
 {%- endif %}
 
 ## Make apt-get non-interactive
@@ -191,24 +197,6 @@ RUN apt-get update && apt-get install -y \
         lua-cjson-dev \
 # For mft kernel module build
         dkms \
-# For python3.5 build
-        sharutils \
-        libncursesw5-dev \
-        libbz2-dev \
-        liblzma-dev \
-        libgdbm-dev \
-        tk-dev \
-        blt-dev \
-        libmpdec-dev \
-        libbluetooth-dev \
-        locales \
-        libsqlite3-dev \
-        libgpm2 \
-        time \
-        net-tools \
-        xvfb \
-        python-sphinx \
-        python3-sphinx \
 # For Jenkins static analysis, unit testing and code coverage
         cppcheck \
         clang \
@@ -314,7 +302,46 @@ RUN apt-get update && apt-get install -y \
         libxml2-utils \
         xsltproc \
         python-lxml \
-        libexpat1-dev
+        libexpat1-dev \
+# For WPA supplication
+        qtbase5-dev          \
+        aspell-en            \
+        libhiredis-dev       \
+        libnl-3-dev          \
+        swig3.0              \
+        libpython2.7-dev     \
+        libssl-dev           \
+        dbus                 \
+        libdbus-1-dev        \
+        libdbus-glib-1-2     \
+        libdbus-glib-1-dev   \
+        libreadline-dev      \
+        libncurses5-dev      \
+        libpcsclite-dev      \
+        docbook-to-man       \
+        docbook-utils        \
+# For kdump-tools
+        libbz2-dev
+
+# Build fix for ARMHF buster libsairedis
+{%- if CONFIGURED_ARCH == "armhf" %}
+       # Install doxygen build dependency packages
+       RUN apt install -y libxapian-dev yui-compressor libclang-3.9-dev texlive-extra-utils \
+           texlive-font-utils  rdfind llvm-6.0-dev libclang-6.0-dev sassc
+
+       # Update doxygen with 64bit file offset patch
+       RUN dget -u http://deb.debian.org/debian/pool/main/d/doxygen/doxygen_1.8.13-10.dsc && \
+           cd doxygen-1.8.13 && \
+           sed -i '56 a add_definitions(-D_FILE_OFFSET_BITS=64)' CMakeLists.txt && \
+           DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -us -uc -b && \
+           cd .. && \
+           dpkg -i ./doxygen_1.8.13-10_armhf.deb && \
+           rm -fr doxygen*
+
+       # Aspell is unable to locate the language dictionaries.
+       # Re-installing aspell-en dictionary to fix it.
+       RUN apt-get install --reinstall -y aspell-en
+{%- endif %}
 
 ## Config dpkg
 ## install the configuration file if it’s currently missing
@@ -344,7 +371,7 @@ RUN export VERSION=1.14.2 \
  && rm go$VERSION.linux-*.tar.gz
 
 RUN pip3 install --upgrade pip
-RUN pip2 install --upgrade pip
+RUN pip2 install --upgrade 'pip<21'
 RUN apt-get purge -y python-pip python3-pip
 
 # For building Python packages
@@ -386,8 +413,8 @@ RUN pip2 install j2cli==0.3.10
 # For sonic-mgmt-framework
 RUN pip2 install "PyYAML==5.3.1"
 RUN pip3 install "PyYAML==5.3.1"
-RUN pip2 install "lxml==4.6.1"
-RUN pip3 install "lxml==4.6.1"
+RUN pip2 install "lxml==4.6.2"
+RUN pip3 install "lxml==4.6.2"
 
 # For sonic-platform-common testing
 RUN pip3 install redis
@@ -405,7 +432,9 @@ RUN pip2 install pyang==2.1.1
 RUN pip3 install pyang==2.1.1
 
 # For mgmt-framework build
-RUN pip2 install mmh3
+RUN pip2 install mmh3==2.5.1
+RUN pip3 install mmh3==2.5.1
+
 RUN apt-get install -y xsltproc
 
 # Install dependencies for isc-dhcp-relay build
@@ -451,4 +480,13 @@ RUN update-alternatives --set iptables /usr/sbin/iptables-legacy
 RUN pip2 install m2crypto==0.36.0
 
 # Install swi tools
-RUN pip2 install git+https://github.com/aristanetworks/swi-tools.git@d51761ec0bb93c73039233f3c01ed48235ffad00
+RUN pip3 install git+https://github.com/aristanetworks/swi-tools.git@bead66bf261770237f7dd21ace3774ba04a017e9
+
+{% if CONFIGURED_ARCH != "amd64" -%}
+# Install node.js for azure pipeline
+RUN curl -sL https://deb.nodesource.com/setup_14.x | bash -
+RUN apt-get install -y nodejs
+
+# Tell azure pipeline to use node.js in the docker
+LABEL "com.azure.dev.pipelines.agent.handler.node.path"="/usr/bin/node"
+{% endif -%}

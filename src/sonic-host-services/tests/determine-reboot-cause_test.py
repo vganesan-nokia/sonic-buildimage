@@ -100,8 +100,8 @@ class TestDetermineRebootCause(object):
 
     def test_find_hardware_reboot_cause(self):
         with mock.patch("determine_reboot_cause.get_reboot_cause_from_platform", return_value=("Powerloss", None)):
-            result = find_hardware_reboot_cause() 
-            assert result == ("Powerloss", None)
+            result = find_hardware_reboot_cause()
+            assert result == "Powerloss (None)"
 
     def test_get_reboot_cause_dict_watchdog(self):
         reboot_cause_dict = get_reboot_cause_dict(REBOOT_CAUSE_WATCHDOG, "", GEN_TIME_WATCHDOG) 
@@ -113,5 +113,5 @@ class TestDetermineRebootCause(object):
 
     @classmethod
     def teardown_class(cls):
-        print("TREARDOWN")
+        print("TEARDOWN")
 

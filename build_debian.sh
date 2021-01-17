@@ -40,6 +40,8 @@ PLATFORM_DIR=platform
 ## Hostname for the linux image
 HOSTNAME=sonic
 DEFAULT_USERINFO="Default admin user,,,"
+BUILD_TOOL_PATH=src/sonic-build-hooks/buildinfo
+TRUSTED_GPG_DIR=$BUILD_TOOL_PATH/trusted.gpg.d
 
 ## Read ONIE image related config file
 . ./onie-image.conf
@@ -70,16 +72,12 @@ pushd $FILESYSTEM_ROOT
 sudo mount --bind . .
 popd
 
-## Build a basic Debian system by debootstrap
-echo '[INFO] Debootstrap...'
-if [[ $CONFIGURED_ARCH == armhf || $CONFIGURED_ARCH == arm64 ]]; then
-    # qemu arm bin executable for cross-building
-    sudo mkdir -p $FILESYSTEM_ROOT/usr/bin
-    sudo cp /usr/bin/qemu*static $FILESYSTEM_ROOT/usr/bin || true
-    sudo http_proxy=$http_proxy debootstrap --variant=minbase --arch $CONFIGURED_ARCH $IMAGE_DISTRO $FILESYSTEM_ROOT http://deb.debian.org/debian
-else
-    sudo http_proxy=$http_proxy debootstrap --variant=minbase --arch $CONFIGURED_ARCH $IMAGE_DISTRO $FILESYSTEM_ROOT http://debian-archive.trafficmanager.net/debian
-fi
+## Build the host debian base system
+echo '[INFO] Build host debian base system...'
+TARGET_PATH=$TARGET_PATH scripts/build_debian_base_system.sh $CONFIGURED_ARCH $IMAGE_DISTRO $FILESYSTEM_ROOT
+
+# Prepare buildinfo
+sudo scripts/prepare_debian_image_buildinfo.sh $CONFIGURED_ARCH $IMAGE_DISTRO $FILESYSTEM_ROOT $http_proxy
 
 ## Config hostname and hosts, otherwise 'sudo ...' will complain 'sudo: unable to resolve host ...'
 sudo LANG=C chroot $FILESYSTEM_ROOT /bin/bash -c "echo '$HOSTNAME' > /etc/hostname"
@@ -99,6 +97,9 @@ sudo LANG=C chroot $FILESYSTEM_ROOT mount proc /proc -t proc
 echo '[INFO] Mount all'
 ## Output all the mounted device for troubleshooting
 sudo LANG=C chroot $FILESYSTEM_ROOT mount
+
+## Install the trusted gpg public keys
+[ -d $TRUSTED_GPG_DIR ] && [ ! -z "$(ls $TRUSTED_GPG_DIR)" ] && sudo cp $TRUSTED_GPG_DIR/* ${FILESYSTEM_ROOT}/etc/apt/trusted.gpg.d/
 
 ## Pointing apt to public apt mirrors and getting latest packages, needed for latest security updates
 sudo cp files/apt/sources.list.$CONFIGURED_ARCH $FILESYSTEM_ROOT/etc/apt/sources.list
@@ -191,6 +192,7 @@ echo '[INFO] Install docker'
 ## Install apparmor utils since they're missing and apparmor is enabled in the kernel
 ## Otherwise Docker will fail to start
 sudo LANG=C chroot $FILESYSTEM_ROOT apt-get -y install apparmor
+sudo cp files/image_config/ntp/ntp-apparmor $FILESYSTEM_ROOT/etc/apparmor.d/local/usr.sbin.ntpd
 sudo LANG=C chroot $FILESYSTEM_ROOT apt-get -y install apt-transport-https \
                                                        ca-certificates \
                                                        curl \
@@ -273,9 +275,6 @@ sudo LANG=C DEBIAN_FRONTEND=noninteractive chroot $FILESYSTEM_ROOT apt-get -y in
     ntpstat                 \
     openssh-server          \
     python                  \
-    python-setuptools       \
-    python3-setuptools      \
-    python-jsonschema       \
     python-apt              \
     traceroute              \
     iputils-ping            \
@@ -311,6 +310,8 @@ sudo LANG=C DEBIAN_FRONTEND=noninteractive chroot $FILESYSTEM_ROOT apt-get -y in
     makedumpfile            \
     conntrack               \
     python-pip              \
+    python3                 \
+    python3-distutils       \
     python3-pip             \
     cron                    \
     haveged                 \
@@ -400,6 +401,7 @@ sudo augtool --autosave "
 set /files/etc/sysctl.conf/kernel.core_pattern '|/usr/local/bin/coredump-compress %e %t %p %P'
 set /files/etc/sysctl.conf/kernel.softlockup_panic 1
 set /files/etc/sysctl.conf/kernel.panic 10
+set /files/etc/sysctl.conf/kernel.hung_task_timeout_secs 300
 set /files/etc/sysctl.conf/vm.panic_on_oom 2
 set /files/etc/sysctl.conf/fs.suid_dumpable 2
 " -r $FILESYSTEM_ROOT
@@ -414,15 +416,24 @@ done < files/image_config/sysctl/sysctl-net.conf
 
 sudo augtool --autosave "$sysctl_net_cmd_string" -r $FILESYSTEM_ROOT
 
+# Upgrade pip via PyPI and uninstall the Debian version
+sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT pip2 install --upgrade pip
+sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT pip3 install --upgrade pip
+sudo LANG=C DEBIAN_FRONTEND=noninteractive chroot $FILESYSTEM_ROOT apt-get purge -y python-pip python3-pip
+
+# For building Python packages
+sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT pip2 install 'setuptools==40.8.0'
+sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT pip2 install 'wheel==0.35.1'
+sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT pip3 install 'setuptools==49.6.00'
+sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT pip3 install 'wheel==0.35.1'
+
 # docker Python API package is needed by Ansible docker module as well as some SONiC applications
-sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT pip2 install 'docker==4.1.0'
 sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT pip3 install 'docker==4.3.1'
 
 ## Note: keep pip installed for maintainance purpose
 
-## Get gcc and python dev pkgs
-sudo LANG=C DEBIAN_FRONTEND=noninteractive chroot $FILESYSTEM_ROOT apt-get -y install gcc libpython2.7-dev
-sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT pip2 install 'netifaces==0.10.7'
+# Install GCC, needed for building/installing some Python packages
+sudo LANG=C DEBIAN_FRONTEND=noninteractive chroot $FILESYSTEM_ROOT apt-get -y install gcc
 
 ## Create /var/run/redis folder for docker-database to mount
 sudo mkdir -p $FILESYSTEM_ROOT/var/run/redis
@@ -514,9 +525,6 @@ then
 
 fi
 
-## Remove gcc and python dev pkgs
-sudo LANG=C DEBIAN_FRONTEND=noninteractive chroot $FILESYSTEM_ROOT apt-get -y remove gcc libpython2.7-dev
-
 ## Add mtd and uboot firmware tools package
 sudo LANG=C chroot $FILESYSTEM_ROOT apt-get -y install u-boot-tools mtd-utils device-tree-compiler
 
@@ -535,6 +543,9 @@ if [[ $CONFIGURED_ARCH == armhf || $CONFIGURED_ARCH == arm64 ]]; then
         sudo LANG=C chroot $FILESYSTEM_ROOT mkimage -f /boot/sonic_fit.its /boot/sonic_${CONFIGURED_ARCH}.fit
     fi
 fi
+
+# Remove GCC
+sudo LANG=C DEBIAN_FRONTEND=noninteractive chroot $FILESYSTEM_ROOT apt-get -y remove gcc
 
 ## Clean up apt
 sudo LANG=C chroot $FILESYSTEM_ROOT apt-get -y autoremove
@@ -555,12 +566,6 @@ sudo LANG=C chroot $FILESYSTEM_ROOT fuser -km /proc || true
 sleep 15
 sudo LANG=C chroot $FILESYSTEM_ROOT umount /proc || true
 
-if [[ $CONFIGURED_ARCH == armhf || $CONFIGURED_ARCH == arm64 ]]; then
-    # Remove qemu arm bin executable used for cross-building
-    sudo rm -f $FILESYSTEM_ROOT/usr/bin/qemu*static || true
-    DOCKERFS_PATH=../dockerfs/
-fi
-
 ## Prepare empty directory to trigger mount move in initramfs-tools/mount_loop_root, implemented by patching
 sudo mkdir $FILESYSTEM_ROOT/host
 
@@ -571,6 +576,14 @@ sudo rm -f $ONIE_INSTALLER_PAYLOAD $FILESYSTEM_SQUASHFS
 sudo du -hsx $FILESYSTEM_ROOT
 sudo mkdir -p $FILESYSTEM_ROOT/var/lib/docker
 sudo mksquashfs $FILESYSTEM_ROOT $FILESYSTEM_SQUASHFS -e boot -e var/lib/docker -e $PLATFORM_DIR
+
+scripts/collect_host_image_version_files.sh $TARGET_PATH $FILESYSTEM_ROOT
+
+if [[ $CONFIGURED_ARCH == armhf || $CONFIGURED_ARCH == arm64 ]]; then
+    # Remove qemu arm bin executable used for cross-building
+    sudo rm -f $FILESYSTEM_ROOT/usr/bin/qemu*static || true
+    DOCKERFS_PATH=../dockerfs/
+fi
 
 ## Compress docker files
 pushd $FILESYSTEM_ROOT && sudo tar czf $OLDPWD/$FILESYSTEM_DOCKERFS -C ${DOCKERFS_PATH}var/lib/docker .; popd

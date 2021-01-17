@@ -1,6 +1,7 @@
 program:orchagent
 program:portsyncd
 program:neighsyncd
+program:fdbsyncd
 program:vlanmgrd
 program:intfmgrd
 program:portmgrd
@@ -9,3 +10,4 @@ program:vrfmgrd
 program:nbrmgrd
 program:vxlanmgrd
 program:coppmgrd
+program:tunnelmgrd
