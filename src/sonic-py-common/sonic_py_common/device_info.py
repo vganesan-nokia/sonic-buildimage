@@ -374,6 +374,22 @@ def is_multi_npu():
     return (num_npus > 1)
 
 
+def is_voq_supervisor():
+    asic_conf_file_path = get_asic_conf_file_path()
+    if asic_conf_file_path is None:
+        return False
+    with open(asic_conf_file_path) as asic_conf_file:
+        for line in asic_conf_file:
+            tokens = line.split('=')
+            if len(tokens) < 2:
+               continue
+            if tokens[0].lower() == 'voq_supervisor':
+                val = tokens[1].strip()
+                if val == '1':
+                    return True
+        return False
+ 
+
 def get_npu_id_from_name(npu_name):
     if npu_name.startswith(NPU_NAME_PREFIX):
         return npu_name[len(NPU_NAME_PREFIX):]
