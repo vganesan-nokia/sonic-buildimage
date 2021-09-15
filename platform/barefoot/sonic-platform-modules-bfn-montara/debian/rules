@@ -6,14 +6,12 @@ SCRIPT_SRC := $(shell pwd)/scripts
 CONFIGS_SRC := $(shell pwd)/configs
 BUILD_DIR := $(shell pwd)/build
 WHEEL_BUILD_DIR := $(BUILD_DIR)/wheel
-PLUGINS_DIR := $(shell pwd)/plugins
 
 %:
 	dh $@
 
 override_dh_auto_build:
 	set -e
-	python2.7 setup.py bdist_wheel -d $(WHEEL_BUILD_DIR)
 	python3 setup.py bdist_wheel -d $(WHEEL_BUILD_DIR)
 	set +e
 
@@ -24,8 +22,6 @@ override_dh_auto_install:
 	cp -r $(CONFIGS_SRC)/network/interfaces.d/* debian/$(PACKAGE_NAME)/etc/network/interfaces.d/
 	dh_installdirs -p$(PACKAGE_NAME) usr/share/sonic/device/$(PLATFORM_NAME)/
 	cp -r $(WHEEL_BUILD_DIR)/*  debian/$(PACKAGE_NAME)/usr/share/sonic/device/$(PLATFORM_NAME)/
-	dh_installdirs -p$(PACKAGE_NAME) usr/share/sonic/device/$(PLATFORM_NAME)/plugins
-	cp -r $(PLUGINS_DIR)/*  debian/$(PACKAGE_NAME)/usr/share/sonic/device/$(PLATFORM_NAME)/plugins/
 
 override_dh_usrlocal:
 

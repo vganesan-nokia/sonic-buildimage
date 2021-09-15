@@ -121,6 +121,8 @@ class TestCfgGen(TestCase):
             utils.to_dict(output.strip()),
             utils.to_dict(
                 '{\n    "Vlan1000|Ethernet8": {\n        "tagging_mode": "untagged"\n    },'
+                ' \n    "Vlan2000|Ethernet12": {\n        "tagging_mode": "tagged"\n    },'
+                ' \n    "Vlan2001|Ethernet12": {\n        "tagging_mode": "tagged"\n    },'
                 ' \n    "Vlan2020|Ethernet12": {\n        "tagging_mode": "tagged"\n    }\n}'
             )
         )
@@ -175,7 +177,7 @@ class TestCfgGen(TestCase):
                 "'DATAACLINGRESS': {'stage': 'ingress', 'type': 'L3', 'ports': ['PortChannel01', 'PortChannel02', 'PortChannel03', 'PortChannel04'], 'policy_desc': 'DATAACLINGRESS'}, "
                 "'SNMP_ACL': {'services': ['SNMP'], 'type': 'CTRLPLANE', 'policy_desc': 'SNMP_ACL', 'stage': 'ingress'}, "
                 "'SSH_ACL': {'services': ['SSH'], 'type': 'CTRLPLANE', 'policy_desc': 'SSH_ACL', 'stage': 'ingress'}, "
-                "'DATAACLEGRESS': {'stage': 'egress', 'type': 'L3', 'ports': ['PortChannel01', 'PortChannel02'], 'policy_desc': 'DATAACLEGRESS'}, "
+                "'DATAACLEGRESS': {'stage': 'egress', 'type': 'L3', 'ports': ['PortChannel01', 'PortChannel02', 'Ethernet100', 'PortChannel03'], 'policy_desc': 'DATAACLEGRESS'}, "
                 "'EVERFLOWV6': {'stage': 'ingress', 'type': 'MIRRORV6', 'ports': ['PortChannel01', 'PortChannel02', 'PortChannel03', 'PortChannel04', 'Ethernet4', 'Ethernet100'], 'policy_desc': 'EVERFLOWV6'}}"
             )
         )
@@ -205,8 +207,10 @@ class TestCfgGen(TestCase):
         self.assertEqual(
             utils.to_dict(output.strip()),
             utils.to_dict(
-                "{'Vlan1000': {'alias': 'ab1', 'dhcp_servers': ['192.0.0.1', '192.0.0.2'], 'vlanid': '1000'}, "
-                "'Vlan2020': {'alias': 'kk1', 'dhcp_servers': ['192.0.0.1', '192.0.0.2'], 'vlanid': '2020'}}"
+                "{'Vlan1000': {'alias': 'ab1', 'dhcp_servers': ['192.0.0.1', '192.0.0.2'], 'vlanid': '1000', 'members': ['Ethernet8']}, "
+                "'Vlan2001': {'alias': 'ab3', 'dhcp_servers': ['192.0.0.1', '192.0.0.2'], 'vlanid': '2001', 'members': ['Ethernet12']},"
+                "'Vlan2000': {'alias': 'ab2', 'dhcp_servers': ['192.0.0.1', '192.0.0.2'], 'vlanid': '2000', 'members': ['Ethernet12']},"
+                "'Vlan2020': {'alias': 'kk1', 'dhcp_servers': ['192.0.0.1', '192.0.0.2'], 'vlanid': '2020', 'members': ['Ethernet12']}}"
             )
         )
 
@@ -214,9 +218,13 @@ class TestCfgGen(TestCase):
         argument = '-m "' + self.sample_graph_simple + '" -p "' + self.port_config + '" -v VLAN_MEMBER'
         output = self.run_script(argument)
         self.assertEqual(
-            output.strip(),
-            "{('Vlan1000', 'Ethernet8'): {'tagging_mode': 'untagged'}, "
-            "('Vlan2020', 'Ethernet12'): {'tagging_mode': 'tagged'}}"
+            utils.to_dict(output.strip()),
+            utils.to_dict(
+                "{('Vlan2000', 'Ethernet12'): {'tagging_mode': 'tagged'}, "
+                "('Vlan1000', 'Ethernet8'): {'tagging_mode': 'untagged'}, "
+                "('Vlan2020', 'Ethernet12'): {'tagging_mode': 'tagged'}, "
+                "('Vlan2001', 'Ethernet12'): {'tagging_mode': 'tagged'}}"
+            )
         )
 
     def test_minigraph_vlan_interfaces(self):
@@ -225,9 +233,14 @@ class TestCfgGen(TestCase):
         self.assertEqual(output.strip(), "[('Vlan1000', '192.168.0.1/27'), 'Vlan1000']")
 
     def test_minigraph_ecmp_fg_nhg(self):
-        argument = '-m "' + self.ecmp_graph + '" -p "' + self.mlnx_port_config + '" -v \"FG_NHG.values()|list\"'
+        argument = '-m "' + self.ecmp_graph + '" -p "' + self.mlnx_port_config + '" -v FG_NHG'
         output = self.run_script(argument)
-        self.assertEqual(output.strip(), "[{'bucket_size': 120}, {'bucket_size': 120}]")
+        print(output.strip())
+        self.assertEqual(utils.to_dict(output.strip()), 
+                         utils.to_dict(
+                            "{'fgnhg_v4': {'match_mode': 'nexthop-based', 'bucket_size': 120}, "
+                            "'fgnhg_v6': {'match_mode': 'nexthop-based', 'bucket_size': 120}}"
+                        ))
 
     def test_minigraph_ecmp_members(self):
         argument = '-m "' + self.ecmp_graph + '" -p "' + self.mlnx_port_config + '" -v "FG_NHG_MEMBER.keys()|list|sort"'
@@ -246,12 +259,6 @@ class TestCfgGen(TestCase):
                                          " 'Vlan31|200:200:200:200::2', 'Vlan31|200:200:200:200::3', 'Vlan31|200:200:200:200::4', 'Vlan31|200:200:200:200::5', "
                                          "'Vlan31|200:200:200:200::6', 'Vlan31|200:200:200:200::7', 'Vlan31|200:200:200:200::8', 'Vlan31|200:200:200:200::9']")
 
-    def test_minigraph_ecmp_prefixes(self):
-        argument = '-m "' + self.ecmp_graph + '" -p "' + self.mlnx_port_config + '" -v "FG_NHG_PREFIX.keys()|list|sort"'
-        output = self.run_script(argument)
-        self.assertEqual(output.strip(), "['100.50.25.12/32', 'fc:5::/128']")
-
-        
     def test_minigraph_portchannels(self):
         argument = '-m "' + self.sample_graph_simple + '" -p "' + self.port_config + '" -v PORTCHANNEL'
         output = self.run_script(argument)

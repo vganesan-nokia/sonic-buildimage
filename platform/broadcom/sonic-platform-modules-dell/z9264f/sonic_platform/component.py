@@ -10,7 +10,6 @@
 ########################################################################
 
 try:
-    import os
     import re
     from sonic_platform_base.component_base import ComponentBase
 
@@ -24,18 +23,20 @@ class Component(ComponentBase):
 
     CHASSIS_COMPONENTS = [
         ["BIOS", ("Performs initialization of hardware components during "
-                                                                 "booting")],
+                  "booting")],
         ["FPGA", ("Used for managing the system LEDs")],
         ["BMC", ("Platform management controller for on-board temperature "
-                         "monitoring, in-chassis power, Fan and LED control")],
+                 "monitoring, in-chassis power, Fan and LED control")],
         ["System CPLD", ("Used for managing the CPU power sequence and CPU states")],
         ["Slave CPLD 1", ("Used for managing QSFP/QSFP28 port transceivers (1-16)")],
         ["Slave CPLD 2", ("Used for managing QSFP/QSFP28 port transceivers (17-32)")],
         ["Slave CPLD 3", ("Used for managing QSFP/QSFP28 port transceivers (33-48)")],
         ["Slave CPLD 4", ("Used for managing QSFP/QSFP28 port transceivers (49-64) and SFP/SFP28 "
-                                                              "port transceivers (65 and 66)")],
-                                                                                        ]
+                          "port transceivers (65 and 66)")],
+    ]
+
     def __init__(self, component_index=0):
+        ComponentBase.__init__(self)
         self.index = component_index
         self.name = self.CHASSIS_COMPONENTS[self.index][0]
         self.description = self.CHASSIS_COMPONENTS[self.index][1]
@@ -48,7 +49,6 @@ class Component(ComponentBase):
         """
         return self.name
 
-    
     def get_description(self):
         """
         Retrieves the description of the component
@@ -77,7 +77,7 @@ class Component(ComponentBase):
             if version:
                 rv = version.group(1).strip()
         return rv
-                                                                                                                                                            
+
     def install_firmware(self, image_path):
         """
         Installs firmware to the component
@@ -87,5 +87,3 @@ class Component(ComponentBase):
         A boolean, True if install was successful, False if not
         """
         return False
-
-

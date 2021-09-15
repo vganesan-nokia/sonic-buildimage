@@ -1,4 +1,3 @@
-import imp
 import signal
 import sys
 
@@ -25,9 +24,34 @@ def db_connect(db_name, namespace=EMPTY_NAMESPACE):
     from swsscommon import swsscommon
     return swsscommon.DBConnector(db_name, REDIS_TIMEOUT_MSECS, True, namespace)
 
+
+# TODO: Consider moving this logic out of daemon_base and into antoher file
+# so that it can be used by non-daemons. We can simply call that function here
+# to retain backward compatibility.
+def _load_module_from_file(module_name, file_path):
+    module = None
+
+    # TODO: Remove this check once we no longer support Python 2
+    if sys.version_info.major == 3:
+        import importlib.machinery
+        import importlib.util
+        loader = importlib.machinery.SourceFileLoader(module_name, file_path)
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+    else:
+        import imp
+        module = imp.load_source(module_name, file_path)
+
+    sys.modules[module_name] = module
+
+    return module
+
+
 #
 # DaemonBase ===================================================================
 #
+
 
 class DaemonBase(Logger):
     def __init__(self, log_identifier):
@@ -68,7 +92,7 @@ class DaemonBase(Logger):
 
         try:
             module_file = "/".join([platform_path, "plugins", module_name + ".py"])
-            module = imp.load_source(module_name, module_file)
+            module = _load_module_from_file(module_name, module_file)
         except IOError as e:
             raise IOError("Failed to load platform module '%s': %s" % (module_name, str(e)))
 
