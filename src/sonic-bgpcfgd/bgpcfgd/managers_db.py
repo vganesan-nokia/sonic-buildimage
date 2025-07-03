@@ -23,7 +23,7 @@ class BGPDataBaseMgr(Manager):
         if self.__set_handler_validate(key, data) == True:
             cmd_list = []
             bgp_asn = data["bgp_asn"]
-            state = data["suppress_fib_pending"]
+            state = data["suppress-fib-pending"]
             cmd_list.append("router bgp %s" % bgp_asn)
             if state == "disabled":
                 cmd_list.append("no bgp suppress-fib-pending")
@@ -43,6 +43,6 @@ class BGPDataBaseMgr(Manager):
 
     def __set_handler_validate(self, key, data):
         if data:
-            if ((key == "localhost") and ("bgp_asn" in data) and ("suppress_fib_pending" in data and data["suppress_fib_pending"] in ["enabled","disabled"])):
+            if ((key == "localhost") and ("bgp_asn" in data) and ("suppress-fib-pending" in data and data["suppress-fib-pending"] in ["enabled","disabled"])):
                  return True
         return False
